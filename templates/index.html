@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Placement Predictor</title>
+  <meta name="description" content="Enter a student's profile and a decision tree model estimates the chance of placement.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='6' y='6' width='52' height='52' rx='12' fill='%233340d1'/%3E%3Cpath d='M18 33l9 9 19-21' fill='none' stroke='%23fff' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Instrument+Sans:wght@400..700&display=swap" rel="stylesheet">
+  <style>
+/* ---------- Tokens ---------- */
+:root {
+  --chalk: #e9edf4;
+  --grid: rgba(16, 27, 51, 0.05);
+  --sheet: #ffffff;
+  --ink: #101b33;
+  --ink-soft: #4a566f;
+  --line: #d3dae6;
+  --indigo: #3340d1;
+  --indigo-deep: #232d9a;
+  --pass: #0b7a5a;
+  --pass-tint: #e0f4ec;
+  --hold: #b4431c;
+  --hold-tint: #fbe8df;
+
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+
+  --radius-sheet: 18px;
+  --radius-control: 10px;
+  color-scheme: light;
+}
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--ink);
+  background-color: var(--chalk);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+  min-height: 100vh;
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 16px 40px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 3px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+/* ---------- Masthead ---------- */
+.masthead { margin-bottom: 32px; }
+
+.masthead h1 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(2.4rem, 6vw, 3.9rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.masthead p {
+  margin: 0;
+  max-width: 56ch;
+  font-size: 1.125rem;
+  color: var(--ink-soft);
+}
+
+/* ---------- Layout ---------- */
+.layout {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 32px; }
+  .result { position: sticky; top: 24px; }
+}
+
+.sheet {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sheet);
+  box-shadow: 0 1px 0 rgba(16, 27, 51, 0.04), 0 18px 40px -24px rgba(16, 27, 51, 0.28);
+}
+
+/* ---------- Form ---------- */
+.profile { padding: 8px 28px 28px; }
+
+.group {
+  margin: 0;
+  padding: 24px 0 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.group legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: -0.015em;
+}
+
+.group > .field:first-of-type { clear: both; }
+
+.field { margin-bottom: 22px; }
+
+.field-label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.97rem;
+  margin-bottom: 8px;
+}
+
+.field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.field-head .field-label { margin-bottom: 0; }
+
+/* Number box + unit */
+.num {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.num input {
+  width: 4.6rem;
+  padding: 7px 8px;
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--ink);
+  background: #f5f7fb;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.num input::-webkit-outer-spin-button,
+.num input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.num input:hover { border-color: #aab4c8; }
+.num input:focus { background: #fff; border-color: var(--indigo); }
+.num input[aria-invalid="true"] { border-color: var(--hold); background: var(--hold-tint); }
+
+.unit {
+  min-width: 6.4rem;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+/* Range slider */
+input[type="range"] {
+  --pct: 50%;
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 99px;
+  background: linear-gradient(to right, var(--indigo) 0 var(--pct), #dbe1ec var(--pct) 100%);
+}
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  border-radius: 99px;
+  background: #dbe1ec;
+}
+input[type="range"]::-moz-range-progress {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--indigo);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px; height: 24px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--indigo);
+  box-shadow: 0 2px 6px rgba(16, 27, 51, 0.25);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--indigo);
+  box-shadow: 0 2px 6px rgba(16, 27, 51, 0.25);
+}
+input[type="range"]:active::-webkit-slider-thumb { background: var(--indigo); }
+
+/* Select */
+.select-wrap { position: relative; }
+.select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 16px; top: 50%;
+  width: 8px; height: 8px;
+  border-right: 2px solid var(--ink-soft);
+  border-bottom: 2px solid var(--ink-soft);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+select {
+  width: 100%;
+  padding: 11px 40px 11px 14px;
+  font: inherit;
+  font-weight: 500;
+  color: var(--ink);
+  background: #f5f7fb;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-control);
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+select:hover { border-color: #aab4c8; }
+select:focus { background: #fff; border-color: var(--indigo); }
+
+/* Segmented choice */
+.segmented {
+  display: inline-flex;
+  padding: 4px;
+  gap: 4px;
+  background: #eef1f7;
+  border-radius: 12px;
+}
+.segmented label { position: relative; margin: 0; }
+.segmented input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.segmented span {
+  display: block;
+  min-width: 5.6rem;
+  padding: 8px 18px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--ink-soft);
+  border-radius: 9px;
+  transition: background-color 0.15s, color 0.15s;
+}
+.segmented input:checked + span {
+  background: #fff;
+  color: var(--indigo-deep);
+  box-shadow: 0 1px 3px rgba(16, 27, 51, 0.18);
+}
+.segmented input:focus-visible + span {
+  outline: 3px solid var(--indigo);
+  outline-offset: 1px;
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 20px;
+  padding-top: 28px;
+}
+
+button { font: inherit; cursor: pointer; }
+
+.primary {
+  padding: 14px 30px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #fff;
+  background: var(--indigo);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 6px 16px -6px rgba(51, 64, 209, 0.7);
+  transition: background-color 0.15s, transform 0.1s;
+}
+.primary:hover { background: var(--indigo-deep); }
+.primary:active { transform: translateY(1px); }
+.primary[disabled] { opacity: 0.65; cursor: progress; }
+
+.quiet {
+  padding: 8px 2px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.quiet:hover { color: var(--ink); }
+
+/* ---------- Result sheet ---------- */
+.result {
+  padding: 36px 28px 32px;
+  min-height: 420px;
+}
+
+.state { display: none; text-align: center; }
+.result[data-state="empty"]   .state-empty,
+.result[data-state="loading"] .state-loading,
+.result[data-state="placed"]  .state-done,
+.result[data-state="held"]    .state-done,
+.result[data-state="error"]   .state-error { display: block; }
+
+.lead {
+  margin: 20px 0 6px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.45rem;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.muted {
+  margin: 0 auto;
+  max-width: 38ch;
+  font-size: 0.93rem;
+  color: var(--ink-soft);
+}
+
+/* The stamp: the one memorable thing on the page */
+.stamp {
+  --stamp: var(--ink-soft);
+  display: inline-grid;
+  place-items: center;
+  min-width: 15rem;
+  padding: 18px 30px;
+  color: var(--stamp);
+  border: 5px double var(--stamp);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  transform: rotate(-5deg);
+}
+.stamp span {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.1rem;
+  line-height: 1.05;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.stamp-ghost {
+  --stamp: #b5bfd2;
+  min-width: 8rem;
+  border-style: dashed;
+  border-width: 4px;
+}
+.stamp-ghost span { font-size: 3rem; }
+
+.result[data-state="placed"] .stamp { --stamp: var(--pass); background: var(--pass-tint); }
+.result[data-state="held"]   .stamp { --stamp: var(--hold); background: var(--hold-tint); }
+
+.result[data-state="error"] .stamp-ghost { --stamp: var(--hold); }
+
+.result[data-state="placed"] .stamp,
+.result[data-state="held"] .stamp {
+  animation: stamp-down 0.42s cubic-bezier(0.2, 1.2, 0.3, 1) both;
+}
+
+@keyframes stamp-down {
+  0%   { opacity: 0; transform: rotate(-12deg) scale(1.7); }
+  60%  { opacity: 1; transform: rotate(-4deg) scale(0.96); }
+  100% { opacity: 1; transform: rotate(-5deg) scale(1); }
+}
+
+.pulse { animation: pulse 1.1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.45; } }
+
+/* Probability meter */
+.meter {
+  width: 100%;
+  max-width: 22rem;
+  height: 14px;
+  margin: 26px auto 10px;
+  overflow: hidden;
+  background: #dfe5f0;
+  border-radius: 99px;
+}
+.meter-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--stamp-color, var(--pass));
+  transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.result[data-state="held"] .meter-fill { --stamp-color: var(--hold); }
+
+.meter-caption {
+  margin: 0 0 22px;
+  font-size: 1rem;
+  color: var(--ink-soft);
+}
+.meter-caption strong {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Payload */
+.payload {
+  margin-top: 22px;
+  text-align: left;
+  font-size: 0.9rem;
+}
+.payload summary {
+  display: inline-block;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--indigo-deep);
+}
+.payload pre {
+  margin: 10px 0 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #e8ecf8;
+  background: var(--ink);
+  border-radius: 12px;
+}
+
+/* ---------- Footer ---------- */
+.foot { margin-top: 36px; }
+.foot p {
+  margin: 0;
+  max-width: 64ch;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+/* ---------- Small screens ---------- */
+@media (max-width: 560px) {
+  .page { padding-top: 32px; }
+  .profile { padding: 4px 18px 22px; }
+  .result { padding: 28px 18px 26px; min-height: 340px; }
+  .unit { min-width: 0; }
+  .field-head { flex-wrap: wrap; }
+  .stamp { min-width: 12rem; padding: 14px 20px; }
+  .stamp span { font-size: 1.7rem; }
+  .primary { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+</style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="masthead">
+      <h1>Placement predictor</h1>
+      <p>Fill in a student's profile and a decision tree, trained on a practice dataset of student records, estimates how likely that student is to be placed.</p>
+    </header>
+
+    <main class="layout">
+
+      <form id="form" class="sheet profile" novalidate>
+
+        <fieldset class="group">
+          <legend>About the student</legend>
+
+          <div class="field">
+            <span class="field-label" id="gender-label">Gender</span>
+            <div class="segmented" role="radiogroup" aria-labelledby="gender-label">
+              <label><input type="radio" name="gender" value="Female" checked><span>Female</span></label>
+              <label><input type="radio" name="gender" value="Male"><span>Male</span></label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="branch">Branch</label>
+            <div class="select-wrap">
+              <select id="branch" name="branch">
+                <option value="CSE" selected>CSE</option>
+                <option value="IT">IT</option>
+                <option value="ECE">ECE</option>
+                <option value="Mechanical">Mechanical</option>
+                <option value="Civil">Civil</option>
+                <option value="Commerce">Commerce</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="field-label" id="extra-label">Takes part in extracurricular activities</span>
+            <div class="segmented" role="radiogroup" aria-labelledby="extra-label">
+              <label><input type="radio" name="extracurricular" value="Yes"><span>Yes</span></label>
+              <label><input type="radio" name="extracurricular" value="No" checked><span>No</span></label>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="group">
+          <legend>Daily habits</legend>
+
+          <div class="field">
+            <div class="field-head">
+              <label class="field-label" for="study_hours">Study time</label>
+              <span class="num"><input type="number" id="study_hours" name="study_hours" min="0" max="12" step="0.1" value="3.4" inputmode="decimal"><span class="unit">hours a day</span></span>
+            </div>
+            <input type="range" data-link="study_hours" min="0" max="12" step="0.1" value="3.4" aria-label="Study time slider">
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <label class="field-label" for="sleep_hours">Sleep</label>
+              <span class="num"><input type="number" id="sleep_hours" name="sleep_hours" min="3" max="12" step="0.1" value="6.8" inputmode="decimal"><span class="unit">hours a night</span></span>
+            </div>
+            <input type="range" data-link="sleep_hours" min="3" max="12" step="0.1" value="6.8" aria-label="Sleep slider">
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <label class="field-label" for="internet_usage">Internet use</label>
+              <span class="num"><input type="number" id="internet_usage" name="internet_usage" min="0" max="12" step="0.1" value="4.5" inputmode="decimal"><span class="unit">hours a day</span></span>
+            </div>
+            <input type="range" data-link="internet_usage" min="0" max="12" step="0.1" value="4.5" aria-label="Internet use slider">
+          </div>
+        </fieldset>
+
+        <fieldset class="group">
+          <legend>Academic record</legend>
+
+          <div class="field">
+            <div class="field-head">
+              <label class="field-label" for="attendance">Attendance</label>
+              <span class="num"><input type="number" id="attendance" name="attendance" min="0" max="100" step="0.1" value="75.7" inputmode="decimal"><span class="unit">percent</span></span>
+            </div>
+            <input type="range" data-link="attendance" min="0" max="100" step="0.1" value="75.7" aria-label="Attendance slider">
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <label class="field-label" for="assignments_completed">Assignments completed</label>
+              <span class="num"><input type="number" id="assignments_completed" name="assignments_completed" min="0" max="20" step="1" value="13" inputmode="numeric"><span class="unit">out of 20</span></span>
+            </div>
+            <input type="range" data-link="assignments_completed" min="0" max="20" step="1" value="13" aria-label="Assignments completed slider">
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <label class="field-label" for="previous_score">Previous score</label>
+              <span class="num"><input type="number" id="previous_score" name="previous_score" min="0" max="100" step="0.1" value="62" inputmode="decimal"><span class="unit">out of 100</span></span>
+            </div>
+            <input type="range" data-link="previous_score" min="0" max="100" step="0.1" value="62" aria-label="Previous score slider">
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <label class="field-label" for="exam_score">Exam score</label>
+              <span class="num"><input type="number" id="exam_score" name="exam_score" min="0" max="100" step="0.1" value="60.5" inputmode="decimal"><span class="unit">out of 100</span></span>
+            </div>
+            <input type="range" data-link="exam_score" min="0" max="100" step="0.1" value="60.5" aria-label="Exam score slider">
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit" class="primary" id="submit">Check placement</button>
+          <button type="button" class="quiet" id="reset-values">Reset to typical values</button>
+        </div>
+      </form>
+
+      <section class="sheet result" id="result" data-state="empty" aria-live="polite" aria-labelledby="result-title">
+        <h2 id="result-title" class="visually-hidden">Prediction result</h2>
+
+        <div class="state state-empty">
+          <div class="stamp stamp-ghost" aria-hidden="true"><span>?</span></div>
+          <p class="lead">Your result will appear here.</p>
+          <p class="muted">Adjust the profile, then press Check placement.</p>
+        </div>
+
+        <div class="state state-loading">
+          <div class="stamp stamp-ghost pulse" aria-hidden="true"><span>&hellip;</span></div>
+          <p class="lead">Checking the profile</p>
+        </div>
+
+        <div class="state state-done">
+          <div class="stamp" id="stamp"><span id="stamp-text"></span></div>
+          <p class="lead" id="verdict"></p>
+
+          <div id="meter-block">
+          <div class="meter" id="meter" role="img" aria-label="">
+            <div class="meter-fill" id="meter-fill"></div>
+          </div>
+          <p class="meter-caption"><strong id="pct"></strong> chance of placement</p>
+          </div>
+
+          <p class="muted">A decision tree gives rough probabilities, and this one learned from a practice dataset. Use it to learn how models work, not to judge a real student.</p>
+
+          <details class="payload">
+            <summary>See the data sent to the model</summary>
+            <pre id="payload"></pre>
+          </details>
+        </div>
+
+        <div class="state state-error" role="alert">
+          <div class="stamp stamp-ghost" aria-hidden="true"><span>!</span></div>
+          <p class="lead">The prediction did not go through</p>
+          <p class="muted" id="error-text"></p>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="foot">
+      <p>Built with FastAPI and scikit-learn. The model is a decision tree that reads 15 numbers: nine come straight from this form and the branch you pick becomes six yes-or-no columns.</p>
+    </footer>
+  </div>
+
+  <script>
+(() => {
+  "use strict";
+
+  // Same origin when served by FastAPI. Falls back to local server if index.html is opened from disk.
+  const API_URL = location.protocol === "file:" ? "http://127.0.0.1:8000/predict" : "/predict";
+
+  const form = document.getElementById("form");
+  const result = document.getElementById("result");
+  const submitBtn = document.getElementById("submit");
+  const resetBtn = document.getElementById("reset-values");
+
+  const stampText = document.getElementById("stamp-text");
+  const verdict = document.getElementById("verdict");
+  const meter = document.getElementById("meter");
+  const meterBlock = document.getElementById("meter-block");
+  const meterFill = document.getElementById("meter-fill");
+  const pct = document.getElementById("pct");
+  const payloadEl = document.getElementById("payload");
+  const errorText = document.getElementById("error-text");
+
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ----- Sliders and number boxes stay in sync -----
+  const sliders = [...form.querySelectorAll('input[type="range"][data-link]')];
+
+  const paintSlider = (slider) => {
+    const min = Number(slider.min);
+    const max = Number(slider.max);
+    const value = Number(slider.value);
+    slider.style.setProperty("--pct", `${((value - min) / (max - min)) * 100}%`);
+  };
+
+  sliders.forEach((slider) => {
+    const box = document.getElementById(slider.dataset.link);
+
+    paintSlider(slider);
+
+    slider.addEventListener("input", () => {
+      box.value = slider.value;
+      box.removeAttribute("aria-invalid");
+      paintSlider(slider);
+    });
+
+    box.addEventListener("input", () => {
+      const value = box.value.trim();
+      const inRange = value !== "" && Number(value) >= Number(box.min) && Number(value) <= Number(box.max);
+      if (inRange) {
+        slider.value = value;
+        paintSlider(slider);
+        box.removeAttribute("aria-invalid");
+      } else {
+        box.setAttribute("aria-invalid", "true");
+      }
+    });
+
+    // On leaving the box, snap a bad value back to the nearest allowed one.
+    box.addEventListener("blur", () => {
+      let value = Number(box.value);
+      if (box.value.trim() === "" || Number.isNaN(value)) value = Number(slider.value);
+      value = Math.min(Number(box.max), Math.max(Number(box.min), value));
+      box.value = value;
+      slider.value = value;
+      paintSlider(slider);
+      box.removeAttribute("aria-invalid");
+    });
+  });
+
+  // ----- Reset -----
+  resetBtn.addEventListener("click", () => {
+    form.reset(); // returns every field to the value written in the HTML
+    sliders.forEach((slider) => {
+      document.getElementById(slider.dataset.link).removeAttribute("aria-invalid");
+      paintSlider(slider);
+    });
+    result.dataset.state = "empty";
+    meterFill.style.width = "0";
+  });
+
+  // ----- Build the request body -----
+  const readForm = () => {
+    const data = new FormData(form);
+    return {
+      gender: data.get("gender"),
+      branch: data.get("branch"),
+      study_hours: Number(data.get("study_hours")),
+      attendance: Number(data.get("attendance")),
+      sleep_hours: Number(data.get("sleep_hours")),
+      internet_usage: Number(data.get("internet_usage")),
+      assignments_completed: Math.round(Number(data.get("assignments_completed"))),
+      previous_score: Number(data.get("previous_score")),
+      extracurricular: data.get("extracurricular"),
+      exam_score: Number(data.get("exam_score")),
+    };
+  };
+
+  // ----- Show states -----
+  const showError = (message) => {
+    errorText.textContent = message;
+    result.dataset.state = "error";
+    scrollResultIntoView();
+  };
+
+  const showResult = (payload, reply) => {
+    const placed = reply.placed === true || reply.prediction === "Placed" || reply.prediction === 1;
+    const prob = typeof reply.probability === "number" ? reply.probability : null;
+    const percent = prob === null ? 0 : Math.round(prob * 100);
+
+    stampText.textContent = placed ? "Likely placed" : "Not placed yet";
+    verdict.textContent = placed
+      ? "The model expects this student to be placed."
+      : "The model does not expect a placement with this profile.";
+    // A decision tree often returns exactly 0 or 1, which sounds more certain than it is.
+    const shown = prob === null ? "" : prob >= 0.995 ? ">99%" : prob <= 0.005 ? "<1%" : `${percent}%`;
+    meterBlock.hidden = prob === null;
+    pct.textContent = shown;
+    meter.setAttribute("aria-label", `${shown.replace(">", "more than ").replace("<", "less than ")} chance of placement`);
+    payloadEl.textContent = JSON.stringify(payload, null, 2);
+
+    // Reset the bar first so it fills from zero each time.
+    meterFill.style.width = "0";
+    result.dataset.state = placed ? "placed" : "held";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      meterFill.style.width = `${percent}%`;
+    }));
+
+    scrollResultIntoView();
+  };
+
+  const scrollResultIntoView = () => {
+    // On a phone the result sits below the form, so bring it into view.
+    if (window.innerWidth < 900) {
+      result.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+    }
+  };
+
+  const explainError = async (response) => {
+    try {
+      const body = await response.json();
+      if (typeof body.detail === "string") return body.detail;
+      if (Array.isArray(body.detail) && body.detail.length) {
+        const first = body.detail[0];
+        const field = Array.isArray(first.loc) ? first.loc[first.loc.length - 1] : "a field";
+        return `Check the value for ${field}: ${first.msg}.`;
+      }
+    } catch (_) { /* fall through */ }
+    return `The server answered with status ${response.status}. Check the terminal running uvicorn for details.`;
+  };
+
+  // ----- Submit -----
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const badBox = form.querySelector('.num input[aria-invalid="true"]');
+    if (badBox) {
+      badBox.focus();
+      showError(`Enter a number between ${badBox.min} and ${badBox.max} for ${badBox.closest(".field").querySelector(".field-label").textContent.toLowerCase()}.`);
+      return;
+    }
+
+    const payload = readForm();
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Checking…";
+    result.dataset.state = "loading";
+
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        showError(await explainError(response));
+        return;
+      }
+
+      showResult(payload, await response.json());
+    } catch (_) {
+      showError("The page could not reach the server. Make sure uvicorn is running, then press Check placement again.");
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Check placement";
+    }
+  });
+})();
+
+</script>
+</body>
+</html>
